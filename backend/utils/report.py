@@ -1,0 +1,164 @@
+# backend/utils/report.py
+import io
+import base64
+from datetime import datetime
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib import colors
+from reportlab.lib.units import cm
+from reportlab.platypus import (
+    SimpleDocTemplate, Paragraph, Spacer,
+    Table, TableStyle, Image as RLImage
+)
+from reportlab.lib.enums import TA_CENTER, TA_LEFT
+import numpy as np
+import cv2
+
+
+def generate_pdf_report(
+    patient_name: str,
+    prediction: str,
+    confidence: float,
+    probabilities: dict,
+    original_b64: str,
+    gradcam_b64: str,
+    recommendation: str
+) -> bytes:
+    """
+    Generates a professional PDF report for the DR prediction.
+
+    Returns:
+        PDF file as bytes
+    """
+    buffer = io.BytesIO()
+    doc    = SimpleDocTemplate(
+        buffer, pagesize=A4,
+        leftMargin=2*cm, rightMargin=2*cm,
+        topMargin=2*cm, bottomMargin=2*cm
+    )
+
+    styles  = getSampleStyleSheet()
+    story   = []
+
+    # Title
+    title_style = styles['Title']
+    story.append(Paragraph(
+        'Diabetic Retinopathy Detection Report',
+        title_style
+    ))
+    story.append(Paragraph(
+        'University of Vavuniya — Department of Physical Science',
+        styles['Normal']
+    ))
+    story.append(Spacer(1, 0.5*cm))
+
+    # Date and patient info
+    date_str = datetime.now().strftime('%d %B %Y, %H:%M')
+    story.append(Paragraph(f'<b>Date:</b> {date_str}', styles['Normal']))
+    if patient_name:
+        story.append(Paragraph(
+            f'<b>Patient Name:</b> {patient_name}', styles['Normal']))
+    story.append(Spacer(1, 0.5*cm))
+
+    # Prediction result
+    color_map = {
+        'No_DR':         '#27ae60',
+        'Mild':          '#f39c12',
+        'Moderate':      '#e67e22',
+        'Severe':        '#e74c3c',
+        'Proliferate_DR':'#8e44ad',
+    }
+    pred_color = color_map.get(prediction, '#2c3e50')
+
+    result_data = [
+        ['DR Stage', prediction],
+        ['Confidence', f'{confidence:.1f}%'],
+        ['Status', 'Analysis Complete'],
+    ]
+    result_table = Table(result_data, colWidths=[5*cm, 10*cm])
+    result_table.setStyle(TableStyle([
+        ('BACKGROUND',  (0, 0), (0, -1), colors.lightgrey),
+        ('FONTNAME',    (0, 0), (-1, -1), 'Helvetica-Bold'),
+        ('FONTSIZE',    (0, 0), (-1, -1), 11),
+        ('ROWBACKGROUNDS', (0, 0), (-1, -1),
+         [colors.white, colors.lightyellow]),
+        ('GRID',        (0, 0), (-1, -1), 0.5, colors.grey),
+        ('PADDING',     (0, 0), (-1, -1), 6),
+    ]))
+    story.append(result_table)
+    story.append(Spacer(1, 0.5*cm))
+
+    # Probability table
+    story.append(Paragraph('<b>Class Probabilities:</b>', styles['Normal']))
+    story.append(Spacer(1, 0.2*cm))
+
+    prob_data = [['DR Stage', 'Probability']]
+    for cls, prob in probabilities.items():
+        prob_data.append([cls, f'{prob:.1f}%'])
+
+    prob_table = Table(prob_data, colWidths=[8*cm, 7*cm])
+    prob_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2c3e50')),
+        ('TEXTCOLOR',  (0, 0), (-1, 0), colors.white),
+        ('FONTNAME',   (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE',   (0, 0), (-1, -1), 10),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1),
+         [colors.white, colors.HexColor('#ecf0f1')]),
+        ('GRID',       (0, 0), (-1, -1), 0.5, colors.grey),
+        ('PADDING',    (0, 0), (-1, -1), 5),
+    ]))
+    story.append(prob_table)
+    story.append(Spacer(1, 0.5*cm))
+
+    # Recommendation
+    story.append(Paragraph('<b>Clinical Recommendation:</b>', styles['Normal']))
+    story.append(Paragraph(recommendation, styles['Normal']))
+    story.append(Spacer(1, 0.5*cm))
+
+    # Images
+    story.append(Paragraph('<b>Retinal Analysis Images:</b>', styles['Normal']))
+    story.append(Spacer(1, 0.2*cm))
+
+    def b64_to_rl_image(b64_str, width=7*cm):
+        """Converts base64 image string to ReportLab Image."""
+        if ',' in b64_str:
+            b64_str = b64_str.split(',')[1]
+        img_bytes = base64.b64decode(b64_str)
+        img_buf   = io.BytesIO(img_bytes)
+        return RLImage(img_buf, width=width, height=width)
+
+    try:
+        img_table = Table(
+            [[b64_to_rl_image(original_b64),
+              b64_to_rl_image(gradcam_b64)]],
+            colWidths=[8*cm, 8*cm]
+        )
+        img_table.setStyle(TableStyle([
+            ('ALIGN',   (0, 0), (-1, -1), 'CENTER'),
+            ('PADDING', (0, 0), (-1, -1), 5),
+        ]))
+        story.append(img_table)
+        story.append(Paragraph(
+            '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Original Image'
+            '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;'
+            '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Grad-CAM Heatmap',
+            styles['Normal']
+        ))
+    except Exception:
+        pass
+
+    # Footer
+    story.append(Spacer(1, 1*cm))
+    story.append(Paragraph(
+        'This report is generated by an AI system and should not replace '
+        'clinical diagnosis. Please consult a qualified ophthalmologist.',
+        styles['Italic']
+    ))
+    story.append(Paragraph(
+        'K.W.I.N. Kariyawasam | Reg. No: 2020/ICT/39 | '
+        'University of Vavuniya',
+        styles['Normal']
+    ))
+
+    doc.build(story)
+    return buffer.getvalue()
