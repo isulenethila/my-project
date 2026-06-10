@@ -1,4 +1,3 @@
-model/best_dr_model.keras
 __pycache__/
 *.pyc
 venv/
