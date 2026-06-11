@@ -1,11 +1,11 @@
 fastapi
 uvicorn[standard]
-tensorflow-cpu==2.15.0
+tensorflow-cpu
+keras
 opencv-python-headless
 numpy
 pillow
 python-multipart
-tf-keras-vis
 reportlab
 scikit-image
 lime

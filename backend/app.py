@@ -35,7 +35,7 @@ app.add_middleware(
 
 # ── Load Model Once on Startup ────────────────────────────────────────────────
 MODEL_PATH = os.path.join('model', 'best_dr_model.keras')
-model      = None
+model = keras.models.load_model(MODEL_PATH, compile=False)
 
 @app.on_event('startup')
 async def load_model():
