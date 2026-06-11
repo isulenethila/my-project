@@ -28,17 +28,16 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        'http://localhost:3000',
-        'https://my-project-l58grv3hq-isulnethila2024-4553s-projects.vercel.app',  
-        'https://*.vercel.app',                          
+        "http://localhost:3000",
+        "https://my-project-orpin-kappa-30.vercel.app",  # your actual domain from earlier screenshot
     ],
-    allow_methods=['*'],
-    allow_headers=['*'],
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # ── Load Model Once on Startup ────────────────────────────────────────────────
 MODEL_PATH = os.path.join('model', 'best_dr_model.keras')
-model = keras.models.load_model(MODEL_PATH, compile=False)
+model = None
 
 @app.on_event('startup')
 async def load_model():
